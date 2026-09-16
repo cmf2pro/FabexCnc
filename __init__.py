@@ -13,7 +13,7 @@ import shapely
 
 # Blender Library
 import bpy
-from bpy.props import CollectionProperty
+from bpy.props import CollectionProperty, IntProperty
 
 # Relative Imports - from 'cam' module
 from .engine import (
@@ -46,6 +46,12 @@ from .utilities.addon_utils import (
 )
 from .utilities.thread_utils import timer_update
 
+# >>> MasterCAM-style UI - companion module, must sit next to this file
+from . import mcam_ui
+
+# Flag: only delete the fallback index property if WE created it
+_mcam_created_index = False
+
 classes = (
     FABEX_ENGINE,
     CamAddonPreferences,
@@ -53,6 +59,7 @@ classes = (
 
 
 def register() -> None:
+    global _mcam_created_index
 
     # Register classes from the list above
     for cls in classes:
@@ -79,8 +86,22 @@ def register() -> None:
     bpy.app.handlers.frame_change_pre.append(timer_update)
     bpy.app.handlers.load_post.append(on_blender_startup)
 
+    # >>> MasterCAM-style UI - registered LAST, after cam_operations exists
+    # Safety: if this Fabex version renamed the active-operation index,
+    # create a fallback so our UI always works
+    if not hasattr(bpy.types.Scene, "cam_active_operation"):
+        bpy.types.Scene.cam_active_operation = IntProperty(default=0)
+        _mcam_created_index = True
+    mcam_ui.register()
+
 
 def unregister() -> None:
+    # >>> MasterCAM-style UI - unregistered FIRST, while cam_operations still exists
+    mcam_ui.unregister()
+
+    if _mcam_created_index:
+        del bpy.types.Scene.cam_active_operation
+
     for cls in classes:
         bpy.utils.unregister_class(cls)
 
